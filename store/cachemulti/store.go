@@ -3,6 +3,9 @@ package cachemulti
 import (
 	"fmt"
 	"io"
+	"sort"
+	"strings"
+	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/store/dbadapter"
 	"github.com/cosmos/cosmos-sdk/store/tracekv"
 	"github.com/cosmos/cosmos-sdk/store/types"
+	"github.com/cosmos/iavl"
 )
 
 // storeNameCtxKey is the TraceContext metadata key that identifies
@@ -121,10 +125,45 @@ func (cms Store) GetStoreType() types.StoreType {
 
 // Write calls Write on each underlying store.
 func (cms Store) Write() {
+	t := time.Now()
 	cms.db.Write()
-	for _, store := range cms.stores {
-		store.Write()
+
+	keys := make([]string, 0, len(cms.stores))
+	keysMap := make(map[string]types.CacheWrap, len(cms.stores))
+	for k, store := range cms.stores {
+		name := k.Name()
+		keys = append(keys, name)
+		keysMap[name] = store
 	}
+
+	sort.Slice(keys, func(i, j int) bool {
+		return strings.Compare(keys[i], keys[j]) > 0
+	})
+
+	iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Write: db.Wirte", time.Since(t).Milliseconds())
+	for _, name := range keys {
+		iavl.AddEnable()
+		if name == "slashing" {
+			iavl.SetEnable(true)
+		}
+		store := keysMap[name]
+		t = time.Now()
+		store.Write()
+		iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Write, key: ", name, time.Since(t).Milliseconds())
+		iavl.RemoveEnable()
+	}
+
+	// fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Write: db.Wirte", time.Since(t).Milliseconds())
+	// for k, store := range cms.stores {
+	// 	t = time.Now()
+	// 	if k.Name() == "slashing" || k.Name() == "staking" {
+	// 		cachekv.NeedWrite = true
+	// 	} else {
+	// 		cachekv.NeedWrite = true
+	// 	}
+	// 	store.Write()
+	// 	fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Write, key: ", k.Name(), time.Since(t).Milliseconds())
+	// }
 }
 
 // Implements CacheWrapper.

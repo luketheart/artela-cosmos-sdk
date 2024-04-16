@@ -3,8 +3,8 @@ package iavl
 import (
 	"fmt"
 
-	"github.com/cosmos/cosmos-sdk/store/types"
 	"github.com/cosmos/iavl"
+	dbm "github.com/cosmos/iavl/db"
 )
 
 var (
@@ -23,18 +23,19 @@ type (
 		Set(key, value []byte) (bool, error)
 		Remove(key []byte) ([]byte, bool, error)
 		SaveVersion() ([]byte, int64, error)
-		DeleteVersion(version int64) error
-		DeleteVersions(versions ...int64) error
+		// DeleteVersion(version int64) error
+		// DeleteVersions(versions ...int64) error
+		DeleteVersionsTo(toVersion int64) error
 		Version() int64
-		Hash() ([]byte, error)
+		Hash() []byte
 		VersionExists(version int64) bool
 		GetVersioned(key []byte, version int64) ([]byte, error)
 		GetImmutable(version int64) (*iavl.ImmutableTree, error)
 		SetInitialVersion(version uint64)
-		Iterator(start, end []byte, ascending bool) (types.Iterator, error)
+		Iterator(start, end []byte, ascending bool) (dbm.Iterator, error)
 		AvailableVersions() []int
-		LoadVersionForOverwriting(targetVersion int64) (int64, error)
-		LazyLoadVersionForOverwriting(targetVersion int64) (int64, error)
+		// LoadVersionForOverwriting(targetVersion int64) (int64, error)
+		// LazyLoadVersionForOverwriting(targetVersion int64) (int64, error)
 	}
 
 	// immutableTree is a simple wrapper around a reference to an iavl.ImmutableTree
@@ -63,6 +64,10 @@ func (it *immutableTree) DeleteVersion(_ int64) error {
 
 func (it *immutableTree) DeleteVersions(_ ...int64) error {
 	panic("cannot call 'DeleteVersions' on an immutable IAVL tree")
+}
+
+func (it *immutableTree) DeleteVersionsTo(_ int64) error {
+	panic("cannot call 'DeleteVersionsTo' on an immutable IAVL tree")
 }
 
 func (it *immutableTree) SetInitialVersion(_ uint64) {

@@ -100,6 +100,7 @@ func (m *Manager) GetFlushAndResetPruningHeights() ([]int64, error) {
 // previousHeight must be greater than 0 for the handling to take effect since valid heights start at 1 and 0 represents
 // the latest height. The latest height cannot be pruned. As a result, if previousHeight is less than or equal to 0, 0 is returned.
 func (m *Manager) HandleHeight(previousHeight int64) int64 {
+	fmt.Println("")
 	if m.opts.GetPruningStrategy() == types.PruningNothing || previousHeight <= 0 {
 		return 0
 	}

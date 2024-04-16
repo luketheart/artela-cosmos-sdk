@@ -5,6 +5,7 @@ import (
 	"io"
 	"sort"
 	"sync"
+	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/cometbft/cometbft/libs/math"
@@ -14,6 +15,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/store/tracekv"
 	"github.com/cosmos/cosmos-sdk/store/types"
 	"github.com/cosmos/cosmos-sdk/types/kv"
+	"github.com/cosmos/iavl"
 )
 
 // cValue represents a cached value.
@@ -112,9 +114,15 @@ func (store *Store) Write() {
 			keys = append(keys, key)
 		}
 	}
+	iavl.AddEnable()
+	defer iavl.RemoveEnable()
+	iavl.SetEnable(true)
+
+	iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>CacheKV Write, direty length: ", len(keys))
 
 	sort.Strings(keys)
 
+	t := time.Now()
 	// TODO: Consider allowing usage of Batch, which would allow the write to
 	// at least happen atomically.
 	for _, key := range keys {
@@ -123,13 +131,18 @@ func (store *Store) Write() {
 		// not. Once we get confirmation that .Delete is guaranteed not to
 		// save the byteslice, then we can assume only a read-only copy is sufficient.
 		cacheValue := store.cache[key]
+		t1 := time.Now()
 		if cacheValue.value != nil {
 			// It already exists in the parent, hence update it.
 			store.parent.Set([]byte(key), cacheValue.value)
+			iavl.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>CacheKV Write, bytes len %d: set time: %d\n", len(cacheValue.value), time.Since(t1).Milliseconds())
 		} else {
 			store.parent.Delete([]byte(key))
+			iavl.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>CacheKV Write, bytes len %d: delete time: %d\n", len(cacheValue.value), time.Since(t1).Milliseconds())
 		}
 	}
+	iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>CacheKV Write: parent", time.Since(t).Milliseconds())
+	t = time.Now()
 
 	// Clear the cache using the map clearing idiom
 	// and not allocating fresh objects.
@@ -140,6 +153,7 @@ func (store *Store) Write() {
 	for key := range store.unsortedCache {
 		delete(store.unsortedCache, key)
 	}
+	iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>CacheKV Write: delete cache", time.Since(t).Milliseconds())
 	store.sortedCache = internal.NewBTree()
 }
 

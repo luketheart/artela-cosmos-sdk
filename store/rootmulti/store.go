@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -424,6 +425,7 @@ func (rs *Store) LastCommitID() types.CommitID {
 
 // Commit implements Committer/CommitStore.
 func (rs *Store) Commit() types.CommitID {
+	t := time.Now()
 	var previousHeight, version int64
 	if rs.lastCommitInfo.GetVersion() == 0 && rs.initialVersion > 1 {
 		// This case means that no commit has been made in the store, we
@@ -438,14 +440,29 @@ func (rs *Store) Commit() types.CommitID {
 		previousHeight = rs.lastCommitInfo.GetVersion()
 		version = previousHeight + 1
 	}
+	iavltree.AddEnable()
+	defer iavltree.RemoveEnable()
+	iavltree.SetEnable(true)
+	iavltree.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Commit: get privious", time.Since(t).Milliseconds())
+	t = time.Now()
 
 	if rs.commitHeader.Height != version {
+		iavltree.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Commit: commit header and version mismatch", "header_height", rs.commitHeader.Height, "version", version)
 		rs.logger.Debug("commit header and version mismatch", "header_height", rs.commitHeader.Height, "version", version)
 	}
+	iavltree.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Commit: compare header version", time.Since(t).Milliseconds())
+	t = time.Now()
 
 	rs.lastCommitInfo = commitStores(version, rs.stores, rs.removalMap)
+	iavltree.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Commit: commitStores", time.Since(t).Milliseconds())
+	t = time.Now()
+
 	rs.lastCommitInfo.Timestamp = rs.commitHeader.Time
-	defer rs.flushMetadata(rs.db, version, rs.lastCommitInfo)
+	defer func() {
+		t = time.Now()
+		rs.flushMetadata(rs.db, version, rs.lastCommitInfo)
+		iavltree.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Commit: flushMetadata", time.Since(t).Milliseconds())
+	}()
 
 	// remove remnants of removed stores
 	for sk := range rs.removalMap {
@@ -455,6 +472,8 @@ func (rs *Store) Commit() types.CommitID {
 			delete(rs.keysByName, sk.Name())
 		}
 	}
+	iavltree.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Commit: remove remnants of removed stores", time.Since(t).Milliseconds())
+	t = time.Now()
 
 	// reset the removalMap
 	rs.removalMap = make(map[types.StoreKey]bool)
@@ -462,11 +481,20 @@ func (rs *Store) Commit() types.CommitID {
 	if err := rs.handlePruning(version); err != nil {
 		panic(err)
 	}
+	println("_____Commit: handlePruning", time.Since(t).Milliseconds())
 
 	return types.CommitID{
 		Version: version,
 		Hash:    rs.lastCommitInfo.Hash(),
 	}
+}
+
+func println(a ...any) {
+	fmt.Println(a...)
+}
+
+func printf(format string, a ...any) {
+	fmt.Printf(format, a...)
 }
 
 // CacheWrap implements CacheWrapper/Store/CommitStore.
@@ -594,11 +622,24 @@ func (rs *Store) GetKVStore(key types.StoreKey) types.KVStore {
 }
 
 func (rs *Store) handlePruning(version int64) error {
+	iavltree.AddEnable()
+	defer iavltree.RemoveEnable()
+	iavltree.SetEnable(true)
+
+	t := time.Now()
 	rs.pruningManager.HandleHeight(version - 1) // we should never prune the current version.
-	if !rs.pruningManager.ShouldPruneAtHeight(version) {
+	println("__________handlePruning: HandleHeight", time.Since(t).Milliseconds())
+	t = time.Now()
+	p := rs.pruningManager.ShouldPruneAtHeight(version)
+	// println("__________handlePruning: ShouldPruneAtHeight", time.Since(t).Milliseconds())
+	if !p {
 		return nil
 	}
+	t = time.Now()
 	rs.logger.Info("prune start", "height", version)
+	defer func() {
+		println("__________handlePruning: PruneStores", time.Since(t).Milliseconds())
+	}()
 	defer rs.logger.Info("prune end", "height", version)
 	return rs.PruneStores(true, nil)
 }
@@ -638,7 +679,14 @@ func (rs *Store) PruneStores(clearPruningManager bool, pruningHeights []int64) (
 
 		store = rs.GetCommitKVStore(key)
 
+		iavltree.AddEnable()
+		if key.Name() == "slashing" {
+			iavltree.SetEnable(true)
+		}
+		t := time.Now()
 		err := store.(*iavl.Store).DeleteVersions(pruningHeights...)
+		printf("_______________PruneStores, key: %-13s, time: %d\n", key.Name(), time.Since(t).Milliseconds())
+		iavltree.RemoveEnable()
 		if err == nil {
 			continue
 		}

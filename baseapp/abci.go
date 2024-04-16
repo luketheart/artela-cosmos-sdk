@@ -13,6 +13,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/cosmos/iavl"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 
@@ -444,8 +445,16 @@ func (app *BaseApp) Commit() abci.ResponseCommit {
 	// Write the DeliverTx state into branched storage and commit the MultiStore.
 	// The write to the DeliverTx state writes all state transitions to the root
 	// MultiStore (app.cms) so when Commit() is called is persists those values.
+
+	t := time.Now()
 	app.deliverState.ms.Write()
+	iavl.AddEnable()
+	defer iavl.RemoveEnable()
+	iavl.SetEnable(true)
+	iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>deliverState.ms.Write", time.Since(t).Milliseconds())
+	t = time.Now()
 	commitID := app.cms.Commit()
+	iavl.Println(">>>>>>>>>>>>>>>>>>>>>>>>>>app.cms.Commit()", time.Since(t).Milliseconds())
 
 	res := abci.ResponseCommit{
 		Data:         commitID.Hash,
